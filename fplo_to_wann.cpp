@@ -8,10 +8,13 @@
 #include <cstdlib>
 #include <iomanip>
 #include <cmath>
+#include <stdexcept>
 #include <eigen3/Eigen/Dense>
 #include "fplo_to_wann.h"
+
 using namespace std;
 using namespace Eigen;
+
 bool Read_block(ifstream &file, map<array<int, 5>, array<double, 2>> &structure, array<double, 3> &max, array<double, 3> &min, Matrix3d &A){
 	string line;
 	getline(file, line);
@@ -49,7 +52,6 @@ bool Read_block(ifstream &file, map<array<int, 5>, array<double, 2>> &structure,
 			}
 		}
 			Vector3d solution = A.fullPivLu().solve(b);
-			//Vector3d solution = A * b;
 			for (int ii = 0; ii < 3; ++ii){
 				int signm = 0;
 				if (abs(solution[ii]) > 0.01){
@@ -207,8 +209,8 @@ Matrix3d Get_to_centres(ifstream &data, ofstream &POSCAR, vector<string> &orbs, 
 map<string, int> Get_elements(string filename){
 	int garbage;
 	string file_name = "SAVE_COUNT_AND_NAMES_OF_FPLO_ELEMENTS.txt";
-	string command1 = "touch "+file_name;
-	string command2 = "rep -E '^([A-Za-z])+[1-9]+ ' ./+hamdata | sed -E 's/^([A-Za-z]+[1-9]+).+/\1/'| sort -u |sed -E 's/^([A-Za-z]+)[1-9]+/\1/'| uniq -c"+file_name;
+	string command1 = "touch "+filename;
+	string command2 = "grep -E '^([A-Za-z])+[1-9]+ ' \"" + filename + "\"| sed -E 's/^([A-Za-z]+[1-9]+).+/\\1/'| sort -u |sed -E 's/^([A-Za-z]+)[1-9]+/\\1/'| uniq -c > "+file_name;
 	string command3 = "rm "+file_name;
 	garbage = system(command1.c_str());
 	garbage = system(command2.c_str());
@@ -226,13 +228,32 @@ map<string, int> Get_elements(string filename){
 	garbage = system(command3.c_str());
 	return to_return;
 }
+vector<string> Get_elements_order(string filename){
+	int garbage;
+	string file_name = "SAVE_ORDER_OF_FPLO_ELEMENTS.txt";
+	string command1 = "touch "+file_name;
+	string command2 = "grep -E '^([A-Za-z])+[1-9]+ ' \""+ filename +"\"| sed -E 's/^([A-Za-z]+[1-9]+).+/\\1/'| sort -u| sed -E 's/^([A-Za-z]+)[1-9]+/\\1/' > "+file_name;
+	string command3 = "rm "+file_name;
+	garbage = system(command1.c_str());
+	garbage = system(command2.c_str());
+	ifstream reader(file_name);
+	string line;
+	vector<string> to_return;
+	while(getline(reader, line)){
+		stringstream ss(line);
+		string element;
+		ss >> element;
+		to_return.push_back(element);
+	}
+	garbage = system(command3.c_str());
+	return to_return;
+}
 
-void Write_centres(ifstream &data, ofstream &Output, ofstream &POSCAR, int num_wann){
-	Output << setw(6) << num_wann + 2  << endl;
+vector<array<double,3>> Write_centres(ifstream &data, ofstream &Output, vector<string> &ordered_elements, int num_wann){
+	Output << setw(6) << num_wann + ordered_elements.size()  << endl;
 	Output << "Some text" << endl;
 	string line;
 	vector<array<double, 3>> tosafe;
-	POSCAR << "Cartesian\n";
 	while(getline(data, line)){
 		array<double, 3> center;
 		stringstream ss(line);
@@ -256,9 +277,6 @@ void Write_centres(ifstream &data, ofstream &Output, ofstream &POSCAR, int num_w
 		Output << endl;
 		if (tosafe.empty()){
 			tosafe.push_back(center);
-			for (int ii = 0; ii < 3; ++ii){
-				POSCAR << setw(17) << setprecision(8) << fixed << center[ii];
-			}
 		}
 		else{
 			bool switch_last = false;
@@ -268,10 +286,7 @@ void Write_centres(ifstream &data, ofstream &Output, ofstream &POSCAR, int num_w
 				}
 			}
 			if (switch_last){
-				for (int ii = 0; ii < 3; ++ii){
-					POSCAR << setw(17) << setprecision(8) << fixed << center[ii];
-				}
-				POSCAR << "\n";
+
 				tosafe.push_back(center);
 			}
 		}
@@ -280,24 +295,18 @@ void Write_centres(ifstream &data, ofstream &Output, ofstream &POSCAR, int num_w
 
 	}
 	for (unsigned int ii = 0; ii < tosafe.size(); ++ii){
-		string chosen;
-		if (ii % 2 == 0){
-			chosen = EL1;
-		}
-		else{
-			chosen = EL2;
-		}
 		for (int jj = 0; jj < 1; ++jj){
-			Output << setw(4) << left << chosen << right;
+			Output << setw(4) << left << ordered_elements[ii] << right;
 			for (int kk = 0; kk < 3; ++kk){
 				Output << setw(17) << setprecision(8) << fixed << tosafe[ii + jj][kk];
 			}
 			Output << endl;
 		}
 	}
+	return tosafe;
 }
 
-void Write_el_to_POSCAR(ofstream &POSCAR, map<string, int> &elements){
+void Write_to_POSCAR(ofstream &POSCAR, map<string, int> &elements, vector<string> ordered_elements, vector<array<double, 3>> centres){
 	for (const auto& el : elements){
 		POSCAR << setw(6) << el.first;
 	}
@@ -306,39 +315,20 @@ void Write_el_to_POSCAR(ofstream &POSCAR, map<string, int> &elements){
 		POSCAR << setw(6) << el.second;
 	}
 	POSCAR << "\n";
-}
-int main(int argc, char* argv[])
-{
-	bool write_ham_to_file = false;
-	string inp_dumm;
-	array<int, 3> print_cell;
-	string dummy_1 = "";
-	if (argc > 1){
-		dummy_1 = argv[1];
-	}
-	if (dummy_1 == "-H"){
-		write_ham_to_file = true;
-		for (int ii = 0; ii < 3; ++ii){
-			dummy_1 = argv[ii + 2];
-			print_cell[ii] = stoi(dummy_1);
+	POSCAR << "Cartesian\n";
+	for (const auto& el : elements){
+		for (unsigned int ii = 0; ii < ordered_elements.size(); ++ii){
+			if (el.first == ordered_elements[ii]){
+				for (int jj = 0; jj < 3; ++jj){
+					POSCAR << setw(17) << fixed <<setprecision(5) << centres[ii][jj];
+				}
+				POSCAR << "\n";
+			}
 		}
 	}
-	map<string, int> elements = Get_elements("./+hamdata");
-	vector<string> orbs;
-	ofstream POSCAR("POSCAR");
-	int num_wann, num_spin;
-	ifstream data("+hamdata");
-	Matrix3d basis = Get_to_centres(data, POSCAR, orbs, num_wann, num_spin);
-	Write_el_to_POSCAR(POSCAR, elements);
-	int garbage = system("touch fplo_to_wann.up_centres.xyz");
-	ofstream Output("fplo_to_wann.up_centres.xyz");
-	garbage = system("touch POSCAR");
-	Write_centres(data, Output, POSCAR, num_wann);
-	//Output every center in the desired format
-		//Finish writting centers
-	garbage = system("cp fplo_to_wann.up_centres.xyz fplo_to_wann.down_centres.xyz");
-	Output.close();
-	//Find block with Hamiltonian energies
+}
+
+void Find_hamiltonians(ifstream &data){
 	string line;
 	while(getline(data, line)){
 		string first;
@@ -348,35 +338,5 @@ int main(int argc, char* argv[])
 			break;
 		}
 	}
-	map<array<int, 5>, array<double, 2>> Hamiltonian_spin1, Hamiltonian_spin2;
-	array<double, 3> min_1 = {0, 0, 0}, min_2 = {0, 0, 0}, max_1 = {0, 0, 0}, max_2 = {0, 0, 0};
 	getline(data, line);
-	bool switch_away = true;
-	//read 1st spin
-	while(switch_away){
-		switch_away = Read_block(data, Hamiltonian_spin1, max_1, min_1, basis);
-	}
-	
-	getline(data, line);
-	getline(data, line);
-	switch_away = true;
-	//read 2nd spin
-	while(switch_away){
-		switch_away = Read_block(data, Hamiltonian_spin2, max_2, min_2, basis);
-	}
-	garbage = system("touch fplo_to_wann.up_hr.dat");
-	ofstream Output_2("fplo_to_wann.up_hr.dat");
-	Write_ham(Output_2, Hamiltonian_spin1, num_wann, max_1, min_1);
-	Output_2.close();
-	garbage = system("touch fplo_to_wann.down_hr.dat");
-	Output_2.open("fplo_to_wann.down_hr.dat");
-	Write_ham(Output_2, Hamiltonian_spin2, num_wann, max_2, min_2);
-	Output_2.close();
-	if (write_ham_to_file){
-		string file_name = "HAMILTONIAN_" + to_string(print_cell[0]) + "_"+ to_string(print_cell[1]) + "_"+ to_string(print_cell[2]) + ".dat";
-		string command = "touch " + file_name;
-		garbage = system(command.c_str());
-		Output_2.open(file_name);
-		To_file_ham(Hamiltonian_spin1, Hamiltonian_spin2, Output_2, orbs, print_cell, num_wann);	
-	}
 }
