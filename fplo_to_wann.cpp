@@ -8,13 +8,158 @@
 #include <cstdlib>
 #include <iomanip>
 #include <cmath>
-#include <Eigen/Dense>
+#include <eigen3/Eigen/Dense>
+#include "fplo_to_wann.h"
 using namespace std;
 using namespace Eigen;
-bool Read_block(ifstream &file, map<array<int, 5>, array<double, 2>> &structure, double lattice, array<double, 3> &max, array<double, 3> &min, Matrix3d &A);
-void Write_ham(ofstream &file, map<array<int, 5>, array<double, 2>> &structure, int num_wann, array<double, 3> &max, array<double, 3> &min);
-void To_file_ham(map<array<int, 5>, array<double, 2>> &structure_1, map<array<int, 5>, array<double, 2>> &structure_2, ofstream &file, vector<string> &orbitals, array<int, 3> &cell, int num_wann);
-void Read_orbs(ifstream &file, vector<string> &orbitals, int num_wann);
+bool Read_block(ifstream &file, map<array<int, 5>, array<double, 2>> &structure, double lattice, array<double, 3> &max, array<double, 3> &min, Matrix3d &A){
+	string line;
+	getline(file, line);
+	stringstream ss_1(line);
+	string dummy;
+	ss_1 >> dummy;
+	map<array<int, 3>, int> count;
+	if (dummy != "Tij,"){
+		return false;
+	}
+	array<int ,5> key;
+	getline(file, line);
+	stringstream ss_2(line);
+	ss_2 >> dummy;
+	key[3] = stoi(dummy);
+	ss_2 >> dummy;
+	key[4] = stoi(dummy);
+	while(getline(file, line)){
+		stringstream ss(line);
+		bool switch_away = false;
+		array<double, 2> values;
+		Vector3d b;
+		array<int ,3 > position;
+		for (int ii = 0; ii < 5; ++ii){
+			ss >> dummy;
+			if (dummy == "end"){
+				switch_away = true;
+				break;
+			}
+			if (ii == 4 || ii == 3){
+				values[ii - 3] = stod(dummy);
+			}
+			else{
+				b(ii) = stod(dummy);
+			}
+		}
+			Vector3d solution = A.fullPivLu().solve(b);
+			//Vector3d solution = A * b;
+			for (int ii = 0; ii < 3; ++ii){
+				int signm = 0;
+				if (abs(solution[ii]) > 0.01){
+					signm = (solution[ii] > 0) ? 1:-1;
+				}
+				if (signm == 1){
+				key[ii] = ceil(abs(solution[ii]) - 0.01) * signm;
+				}
+				else if (signm == -1){
+				key[ii] = floor(abs(solution[ii]) + 0.01) * signm;
+				}
+				else if (signm == 0){
+				key[ii] = 0;
+				}
+				position[ii] = key[ii];
+				if (key[ii] > max[ii]){
+					max[ii] = key[ii];
+				}
+				if (key[ii] < min[ii]){
+					min[ii] = key[ii];
+				}
+			}
+		if (switch_away){
+			break;
+		}
+		structure[key] = values;
+	}
+	return true;
+}
+
+void Write_ham(ofstream &file, map<array<int, 5>, array<double, 2>> &structure, int num_wann, array<double, 3> &max, array<double, 3> &min){
+	file << "Some text\n";
+	int num_lines = (abs(max[0]) + abs(min[0]) + 1) * (abs(max[1]) + abs(min[1]) + 1) * (abs(max[2]) + abs(min[2]) + 1);
+	file << num_wann << "\n";
+	file << num_lines << "\n";
+	for (int ii = 0; ii < num_lines; ++ii){
+		if (ii % 15 == 0 && ii != 0){
+			file << "\n";
+		}
+		file << setw(5) << 1;
+	}
+	file << "\n";
+	array<int, 5> indices;
+	array<double, 2> to_print;
+	for (int ii = min[0]; ii <= max[0]; ++ii){
+		for (int jj = min[1]; jj <= max[1]; ++jj){
+			for (int kk = min[2]; kk <= max[2]; ++kk){
+				for (int nn = 1; nn <= num_wann; ++nn){
+					for (int mm = 1; mm <= num_wann; ++mm){
+						indices = {ii, jj, kk, nn, mm};
+						for (int hh = 0; hh < 5; ++hh){
+							file << setw(5) << indices[hh];
+						}
+						if(structure.contains(indices)){
+							to_print = structure[indices];
+						}
+						else{
+						to_print = {0, 0};
+						}
+						file << setw(20) << fixed << setprecision(6) << to_print[0];
+						file << setw(20) << fixed << setprecision(6) << to_print[1];
+						file << endl;
+						}
+					}
+				}
+			}
+		}
+	}
+void To_file_ham(map<array<int, 5>, array<double, 2>> &structure_1, map<array<int, 5>, array<double, 2>> &structure_2, ofstream &file, vector<string> &orbitals, array<int, 3> &cell, int num_wann){
+	array<int, 5> indices;
+	indices[0] = cell[0];
+	indices[1] = cell[1];
+	indices[2] = cell[2];
+	file << "x" << "\t";
+	for (auto &str : orbitals){
+		file << str << "\t";
+	}
+	file << "x" << "\t";
+	for (auto &str : orbitals){
+		file << str << "\t";
+	}
+	file << "\n";
+	for (int ii = 1; ii <= num_wann; ++ii){
+		file << orbitals[ii - 1] << "\t";
+		indices[3] = ii;
+		for (int jj = 1; jj <= num_wann; ++jj){
+			indices[4] = jj; 
+			file << structure_1[indices][0] << "\t";
+		}
+
+		file << orbitals[ii -1] << "\t";
+		indices[3] = ii;
+		for (int jj = 1; jj <= num_wann; ++jj){
+			indices[4] = jj; 
+			file << structure_2[indices][0] << "\t";
+		}
+	file << "\n";
+	}
+}
+void Read_orbs(ifstream &file, vector<string> &orbitals, int num_wann){
+	for (int ii = 0; ii < num_wann; ++ii){
+		string line;
+		getline(file, line);
+		stringstream ss(line);
+		string dummy, orb;
+		ss >> dummy;
+		ss >> orb;
+		orbitals.push_back(orb);
+	}
+}
 int main(int argc, char* argv[])
 {
 	bool write_ham_to_file = false;
@@ -129,7 +274,7 @@ int main(int argc, char* argv[])
 
 	}
 	//Print the unique centers with their chemical 
-	for (int ii = 0; ii < tosafe.size(); ++ii){
+	for (unsigned int ii = 0; ii < tosafe.size(); ++ii){
 		string chosen;
 		if (ii % 2 == 0){
 			chosen = EL1;
@@ -188,182 +333,5 @@ int main(int argc, char* argv[])
 		system(command.c_str());
 		Output_2.open(file_name);
 		To_file_ham(Hamiltonian_spin1, Hamiltonian_spin2, Output_2, orbs, print_cell, num_wann);	
-	}
-}
-bool Read_block(ifstream &file, map<array<int, 5>, array<double, 2>> &structure, double lattice, array<double, 3> &max, array<double, 3> &min, Matrix3d &A){
-	string line;
-	getline(file, line);
-	stringstream ss_1(line);
-	string dummy;
-	ss_1 >> dummy;
-	map<array<int, 3>, int> count;
-	if (dummy != "Tij,"){
-		return false;
-	}
-	array<int ,5> key;
-	getline(file, line);
-	stringstream ss_2(line);
-	ss_2 >> dummy;
-	key[3] = stoi(dummy);
-	ss_2 >> dummy;
-	key[4] = stoi(dummy);
-	while(getline(file, line)){
-		stringstream ss(line);
-		bool switch_away = false;
-		array<double, 2> values;
-		Vector3d b;
-		array<int ,3 > position;
-		for (int ii = 0; ii < 5; ++ii){
-			ss >> dummy;
-			if (dummy == "end"){
-				switch_away = true;
-				break;
-			}
-			if (ii == 4 || ii == 3){
-				values[ii - 3] = stod(dummy);
-			}
-			else{
-				b(ii) = stod(dummy);
-				//cout << setprecision(2) << setw(5) << b(ii);
-				//position[ii] = stod(dummy);
-				//int signm = 0;
-				//if (abs(position[ii]) > 0.001){
-				//	signm = (position[ii] > 0) ? 1:-1;
-				//}
-				//key[ii] = floor(abs(position[ii] / lattice)) * signm;
-				//if (key[ii] > max[ii]){
-				//	max[ii] = key[ii];
-				//}
-				//if (key[ii] < min[ii]){
-				//	min[ii] = key[ii];
-				//}
-			}
-		}
-			Vector3d solution = A.fullPivLu().solve(b);
-			//Vector3d solution = A * b;
-			for (int ii = 0; ii < 3; ++ii){
-				int signm = 0;
-				if (abs(solution[ii]) > 0.01){
-					signm = (solution[ii] > 0) ? 1:-1;
-				}
-				if (signm == 1){
-				key[ii] = ceil(abs(solution[ii]) - 0.01) * signm;
-				}
-				else if (signm == -1){
-				key[ii] = floor(abs(solution[ii]) + 0.01) * signm;
-				}
-				else if (signm == 0){
-				key[ii] = 0;
-				}
-				//cout << setw(5) << key[ii];
-				position[ii] = key[ii];
-				if (key[ii] > max[ii]){
-					max[ii] = key[ii];
-				}
-				if (key[ii] < min[ii]){
-					min[ii] = key[ii];
-				}
-			}
-			//cout << setw(8) << key[3];
-			//cout << setw(8) << key[4];
-			//cout << setw(8) << setprecision(3) << values[0];
-			//cout << endl;
-		//if(key[3] == 1 || key[4] ==1){
-		//cout << key[3] << " " << key[4] << " " << lattice << endl;
-		//for (int ii = 0; ii < 3; ++ii){
-		//	cout << position[ii] << " ";
-		//	}
-		//cout << endl;
-		//for (int ii = 0; ii < 3; ++ii){
-		//	cout << key[ii] << " ";
-		//	}
-		//cout << endl;
-		//}
-		if (switch_away){
-			break;
-		}
-		structure[key] = values;
-	}
-	return true;
-}
-
-void Write_ham(ofstream &file, map<array<int, 5>, array<double, 2>> &structure, int num_wann, array<double, 3> &max, array<double, 3> &min){
-	file << "Some text\n";
-	int num_lines = (abs(max[0]) + abs(min[0]) + 1) * (abs(max[1]) + abs(min[1]) + 1) * (abs(max[2]) + abs(min[2]) + 1);
-	file << num_wann << "\n";
-	file << num_lines << "\n";
-	for (int ii = 0; ii < num_lines; ++ii){
-		if (ii % 15 == 0 && ii != 0){
-			file << "\n";
-		}
-		file << setw(5) << 1;
-	}
-	file << "\n";
-	array<int, 5> indices;
-	array<double, 2> to_print;
-	for (int ii = min[0]; ii <= max[0]; ++ii){
-		for (int jj = min[1]; jj <= max[1]; ++jj){
-			for (int kk = min[2]; kk <= max[2]; ++kk){
-				for (int nn = 1; nn <= num_wann; ++nn){
-					for (int mm = 1; mm <= num_wann; ++mm){
-						indices = {ii, jj, kk, nn, mm};
-						for (int hh = 0; hh < 5; ++hh){
-							file << setw(5) << indices[hh];
-						}
-						if(structure.contains(indices)){
-							to_print = structure[indices];
-						}
-						else{
-						to_print = {0, 0};
-						}
-						file << setw(20) << fixed << setprecision(6) << to_print[0];
-						file << setw(20) << fixed << setprecision(6) << to_print[1];
-						file << endl;
-						}
-					}
-				}
-			}
-		}
-	}
-void To_file_ham(map<array<int, 5>, array<double, 2>> &structure_1, map<array<int, 5>, array<double, 2>> &structure_2, ofstream &file, vector<string> &orbitals, array<int, 3> &cell, int num_wann){
-	array<int, 5> indices;
-	indices[0] = cell[0];
-	indices[1] = cell[1];
-	indices[2] = cell[2];
-	file << "x" << "\t";
-	for (auto &str : orbitals){
-		file << str << "\t";
-	}
-	file << "x" << "\t";
-	for (auto &str : orbitals){
-		file << str << "\t";
-	}
-	file << "\n";
-	for (int ii = 1; ii <= num_wann; ++ii){
-		file << orbitals[ii - 1] << "\t";
-		indices[3] = ii;
-		for (int jj = 1; jj <= num_wann; ++jj){
-			indices[4] = jj; 
-			file << structure_1[indices][0] << "\t";
-		}
-
-		file << orbitals[ii -1] << "\t";
-		indices[3] = ii;
-		for (int jj = 1; jj <= num_wann; ++jj){
-			indices[4] = jj; 
-			file << structure_2[indices][0] << "\t";
-		}
-	file << "\n";
-	}
-}
-void Read_orbs(ifstream &file, vector<string> &orbitals, int num_wann){
-	for (int ii = 0; ii < num_wann; ++ii){
-		string line;
-		getline(file, line);
-		stringstream ss(line);
-		string dummy, orb;
-		ss >> dummy;
-		ss >> orb;
-		orbitals.push_back(orb);
 	}
 }
