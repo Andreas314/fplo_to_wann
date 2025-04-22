@@ -201,7 +201,7 @@ map<string, int> Get_elements(string filename){
 	int garbage;
 	string file_name = "SAVE_COUNT_AND_NAMES_OF_FPLO_ELEMENTS.txt";
 	string command1 = "touch "+file_name;
-	string command2 = "grep -E '^([A-Za-z])+[1-9]+ ' "+filename+" | sed -E 's/^([A-Za-z]+)[1-9]+.+/\1/'| sort | uniq -c > "+file_name;
+	string command2 = "rep -E '^([A-Za-z])+[1-9]+ ' ./+hamdata | sed -E 's/^([A-Za-z]+[1-9]+).+/\1/'| sort -u |sed -E 's/^([A-Za-z]+)[1-9]+/\1/'| uniq -c"+file_name;
 	string command3 = "rm "+file_name;
 	garbage = system(command1.c_str());
 	garbage = system(command2.c_str());
