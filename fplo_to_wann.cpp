@@ -12,7 +12,7 @@
 #include "fplo_to_wann.h"
 using namespace std;
 using namespace Eigen;
-bool Read_block(ifstream &file, map<array<int, 5>, array<double, 2>> &structure, double lattice, array<double, 3> &max, array<double, 3> &min, Matrix3d &A){
+bool Read_block(ifstream &file, map<array<int, 5>, array<double, 2>> &structure, array<double, 3> &max, array<double, 3> &min, Matrix3d &A){
 	string line;
 	getline(file, line);
 	stringstream ss_1(line);
@@ -160,6 +160,66 @@ void Read_orbs(ifstream &file, vector<string> &orbitals, int num_wann){
 		orbitals.push_back(orb);
 	}
 }
+
+Matrix3d Get_to_centres(ifstream &data, ofstream &POSCAR, vector<string> &orbs, int &num_wann){
+	Matrix3d basis_2;
+	string line;
+	POSCAR << "SOme text" << "\n" << 1 << "\n";
+	while(getline(data, line)){
+		stringstream ss(line);
+		string first;
+		ss >> first;
+		if (first == "wannames:"){
+			Read_orbs(data, orbs, num_wann);
+		}
+		if (first == "nwan:"){
+			getline(data, line);
+			stringstream ss_1(line);
+			ss_1 >> first;
+			num_wann = stoi(first);
+		}
+		if (first == "ice_vectors:"){
+			for (int ii = 0; ii < 3; ++ii){
+				getline(data, line);
+				stringstream ss_1(line);
+				for (int jj = 0; jj < 3; ++jj){
+					ss_1 >> first;
+					basis_2(jj, ii) = stod(first);
+					POSCAR << setw(17) << fixed <<setprecision(5) << stod(first) * BOHR_TO_ANG;
+				}
+				POSCAR << "\n";
+			}
+		}
+		if (first == "wancenters:"){
+			break;
+		}
+	}
+	return basis_2;
+}
+
+map<string, int> Get_elements(string filename){
+	int garbage;
+	string file_name = "SAVE_COUNT_AND_NAMES_OF_FPLO_ELEMENTS.txt";
+	string command1 = "touch "+file_name;
+	string command2 = "grep -E '^([A-Za-z])+[1-9]+ ' "+filename+" | sed -E 's/^([A-Za-z]+)[1-9]+.+/\1/'| sort | uniq -c > "+file_name;
+	string command3 = "rm "+file_name;
+	garbage = system(command1.c_str());
+	garbage = system(command2.c_str());
+	ifstream reader(file_name);
+	string line;
+	map<string, int> to_return;
+	while(getline(reader, line)){
+		stringstream ss(line);
+		string count_str, element;
+		ss >> count_str;
+		ss >> element;
+		int count = stoi(count_str);
+		to_return[element] = count;
+	}
+	garbage = system(command3.c_str());
+	return to_return;
+}
+
 int main(int argc, char* argv[])
 {
 	bool write_ham_to_file = false;
@@ -176,57 +236,20 @@ int main(int argc, char* argv[])
 			print_cell[ii] = stoi(dummy_1);
 		}
 	}
-	//First read and output wannier centers
-	string EL1 = "Eu";
-	string EL2 = "O";
+	map<string, int> elements = Get_elements("./+hamdata");
+	vector<string> orbs;
+	ofstream POSCAR("POSCAR");
 	int num_wann;
 	ifstream data("+hamdata");
-	string line;
-	ofstream POSCAR("POSCAR");
-	POSCAR << "SOme text" << "\n" << 1 << "\n";
-	//Get to the beginning of the centers block
-	Matrix3d basis_2;
-	vector<string> orbs;
-	while(getline(data, line)){
-		stringstream ss(line);
-		string first;
-		ss >> first;
-		if (first == "wannames:"){
-			Read_orbs(data, orbs, num_wann);
-		}
-		if (first == "nwan:"){
-			getline(data, line);
-			stringstream ss_1(line);
-			ss_1 >> first;
-			num_wann = stoi(first);
-		}
-		if (first == "lattice_vectors:"){
-			for (int ii = 0; ii < 3; ++ii){
-				getline(data, line);
-				stringstream ss_1(line);
-				for (int jj = 0; jj < 3; ++jj){
-					ss_1 >> first;
-					basis_2(jj, ii) = stod(first);
-					POSCAR << setw(17) << fixed <<setprecision(5) << stod(first) * BOHR_TO_ANG;
-				}
-				POSCAR << "\n";
-			}
-		}
-		if (first == "wancenters:"){
-			break;
-		}
-	}
-	//Matrix3d basis = basis_2.inverse();
-	Matrix3d basis = basis_2;
-	//Make an Outputfile
+	Matrix3d basis = Get_to_centres(data, POSCAR, orbs, num_wann);
 	vector<array<double, 3>> tosafe;
-	system("touch fplo_to_wann.up_centres.xyz");
+	int garbage = system("touch fplo_to_wann.up_centres.xyz");
 	ofstream Output("fplo_to_wann.up_centres.xyz");
-	system("touch POSCAR");
+	garbage = system("touch POSCAR");
 	Output << setw(6) << num_wann + 2  << endl;
 	Output << "Some text" << endl;
-	double lattice;
 	//Output every center in the desired format
+	string line;
 	while(getline(data, line)){
 		array<double, 3> center;
 		stringstream ss(line);
@@ -241,9 +264,6 @@ int main(int argc, char* argv[])
 			if (ii == 0){
 				Output <<setw(4) << left << "X" << right;
 			}
-			if (abs(stod(number)) > 0.001){
-					lattice = abs(stod(number));
-			}
 			center[ii] = stod(number) * BOHR_TO_ANG;
 			Output << setw(17) << setprecision(8) << fixed <<center[ii];
 		}
@@ -255,7 +275,6 @@ int main(int argc, char* argv[])
 			tosafe.push_back(center);
 		}
 		else{
-			//Safe all unique centers
 			bool switch_last = false;
 			for (int ii = 0; ii < 3; ++ii){
 				if(center[ii] != tosafe.back()[ii]){
@@ -273,7 +292,6 @@ int main(int argc, char* argv[])
 
 
 	}
-	//Print the unique centers with their chemical 
 	for (unsigned int ii = 0; ii < tosafe.size(); ++ii){
 		string chosen;
 		if (ii % 2 == 0){
@@ -285,14 +303,13 @@ int main(int argc, char* argv[])
 		for (int jj = 0; jj < 1; ++jj){
 			Output << setw(4) << left << chosen << right;
 				for (int kk = 0; kk < 3; ++kk){
-					//Stupid and easy way to get the lattice parameter
 					Output << setw(17) << setprecision(8) << fixed << tosafe[ii + jj][kk];
 				}
 			Output << endl;
 			}
 		}
 	//Finish writting centers
-	system("cp fplo_to_wann.up_centres.xyz fplo_to_wann.down_centres.xyz");
+	garbage = system("cp fplo_to_wann.up_centres.xyz fplo_to_wann.down_centres.xyz");
 	Output.close();
 	//Find block with Hamiltonian energies
 	while(getline(data, line)){
@@ -309,7 +326,7 @@ int main(int argc, char* argv[])
 	bool switch_away = true;
 	//read 1st spin
 	while(switch_away){
-		switch_away = Read_block(data, Hamiltonian_spin1, lattice, max_1, min_1, basis);
+		switch_away = Read_block(data, Hamiltonian_spin1, max_1, min_1, basis);
 	}
 	
 	getline(data, line);
@@ -317,20 +334,20 @@ int main(int argc, char* argv[])
 	switch_away = true;
 	//read 2nd spin
 	while(switch_away){
-		switch_away = Read_block(data, Hamiltonian_spin2, lattice, max_2, min_2, basis);
+		switch_away = Read_block(data, Hamiltonian_spin2, max_2, min_2, basis);
 	}
-	system("touch fplo_to_wann.up_hr.dat");
+	garbage = system("touch fplo_to_wann.up_hr.dat");
 	ofstream Output_2("fplo_to_wann.up_hr.dat");
 	Write_ham(Output_2, Hamiltonian_spin1, num_wann, max_1, min_1);
 	Output_2.close();
-	system("touch fplo_to_wann.down_hr.dat");
+	garbage = system("touch fplo_to_wann.down_hr.dat");
 	Output_2.open("fplo_to_wann.down_hr.dat");
 	Write_ham(Output_2, Hamiltonian_spin2, num_wann, max_2, min_2);
 	Output_2.close();
 	if (write_ham_to_file){
 		string file_name = "HAMILTONIAN_" + to_string(print_cell[0]) + "_"+ to_string(print_cell[1]) + "_"+ to_string(print_cell[2]) + ".dat";
 		string command = "touch " + file_name;
-		system(command.c_str());
+		garbage = system(command.c_str());
 		Output_2.open(file_name);
 		To_file_ham(Hamiltonian_spin1, Hamiltonian_spin2, Output_2, orbs, print_cell, num_wann);	
 	}
