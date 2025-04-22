@@ -161,7 +161,7 @@ void Read_orbs(ifstream &file, vector<string> &orbitals, int num_wann){
 	}
 }
 
-Matrix3d Get_to_centres(ifstream &data, ofstream &POSCAR, vector<string> &orbs, int &num_wann){
+Matrix3d Get_to_centres(ifstream &data, ofstream &POSCAR, vector<string> &orbs, int &num_wann, int &num_spin){
 	Matrix3d basis_2;
 	string line;
 	POSCAR << "SOme text" << "\n" << 1 << "\n";
@@ -172,13 +172,20 @@ Matrix3d Get_to_centres(ifstream &data, ofstream &POSCAR, vector<string> &orbs, 
 		if (first == "wannames:"){
 			Read_orbs(data, orbs, num_wann);
 		}
+		if (first == "nspin:"){
+			getline(data, line);
+			stringstream ss_1(line);
+			ss_1 >> first;
+			num_spin = stoi(first);
+			
+		}
 		if (first == "nwan:"){
 			getline(data, line);
 			stringstream ss_1(line);
 			ss_1 >> first;
 			num_wann = stoi(first);
 		}
-		if (first == "ice_vectors:"){
+		if (first == "lattice_vectors:"){
 			for (int ii = 0; ii < 3; ++ii){
 				getline(data, line);
 				stringstream ss_1(line);
@@ -220,36 +227,12 @@ map<string, int> Get_elements(string filename){
 	return to_return;
 }
 
-int main(int argc, char* argv[])
-{
-	bool write_ham_to_file = false;
-	string inp_dumm;
-	array<int, 3> print_cell;
-	string dummy_1 = "";
-	if (argc > 1){
-		dummy_1 = argv[1];
-	}
-	if (dummy_1 == "-H"){
-		write_ham_to_file = true;
-		for (int ii = 0; ii < 3; ++ii){
-			dummy_1 = argv[ii + 2];
-			print_cell[ii] = stoi(dummy_1);
-		}
-	}
-	map<string, int> elements = Get_elements("./+hamdata");
-	vector<string> orbs;
-	ofstream POSCAR("POSCAR");
-	int num_wann;
-	ifstream data("+hamdata");
-	Matrix3d basis = Get_to_centres(data, POSCAR, orbs, num_wann);
-	vector<array<double, 3>> tosafe;
-	int garbage = system("touch fplo_to_wann.up_centres.xyz");
-	ofstream Output("fplo_to_wann.up_centres.xyz");
-	garbage = system("touch POSCAR");
+void Write_centres(ifstream &data, ofstream &Output, ofstream &POSCAR, int num_wann){
 	Output << setw(6) << num_wann + 2  << endl;
 	Output << "Some text" << endl;
-	//Output every center in the desired format
 	string line;
+	vector<array<double, 3>> tosafe;
+	POSCAR << "Cartesian\n";
 	while(getline(data, line)){
 		array<double, 3> center;
 		stringstream ss(line);
@@ -273,6 +256,9 @@ int main(int argc, char* argv[])
 		Output << endl;
 		if (tosafe.empty()){
 			tosafe.push_back(center);
+			for (int ii = 0; ii < 3; ++ii){
+				POSCAR << setw(17) << setprecision(8) << fixed << center[ii];
+			}
 		}
 		else{
 			bool switch_last = false;
@@ -291,6 +277,7 @@ int main(int argc, char* argv[])
 		}
 
 
+
 	}
 	for (unsigned int ii = 0; ii < tosafe.size(); ++ii){
 		string chosen;
@@ -302,16 +289,57 @@ int main(int argc, char* argv[])
 		}
 		for (int jj = 0; jj < 1; ++jj){
 			Output << setw(4) << left << chosen << right;
-				for (int kk = 0; kk < 3; ++kk){
-					Output << setw(17) << setprecision(8) << fixed << tosafe[ii + jj][kk];
-				}
-			Output << endl;
+			for (int kk = 0; kk < 3; ++kk){
+				Output << setw(17) << setprecision(8) << fixed << tosafe[ii + jj][kk];
 			}
+			Output << endl;
 		}
-	//Finish writting centers
+	}
+}
+
+void Write_el_to_POSCAR(ofstream &POSCAR, map<string, int> &elements){
+	for (const auto& el : elements){
+		POSCAR << setw(6) << el.first;
+	}
+	POSCAR << "\n";
+	for (const auto& el : elements){
+		POSCAR << setw(6) << el.second;
+	}
+	POSCAR << "\n";
+}
+int main(int argc, char* argv[])
+{
+	bool write_ham_to_file = false;
+	string inp_dumm;
+	array<int, 3> print_cell;
+	string dummy_1 = "";
+	if (argc > 1){
+		dummy_1 = argv[1];
+	}
+	if (dummy_1 == "-H"){
+		write_ham_to_file = true;
+		for (int ii = 0; ii < 3; ++ii){
+			dummy_1 = argv[ii + 2];
+			print_cell[ii] = stoi(dummy_1);
+		}
+	}
+	map<string, int> elements = Get_elements("./+hamdata");
+	vector<string> orbs;
+	ofstream POSCAR("POSCAR");
+	int num_wann, num_spin;
+	ifstream data("+hamdata");
+	Matrix3d basis = Get_to_centres(data, POSCAR, orbs, num_wann, num_spin);
+	Write_el_to_POSCAR(POSCAR, elements);
+	int garbage = system("touch fplo_to_wann.up_centres.xyz");
+	ofstream Output("fplo_to_wann.up_centres.xyz");
+	garbage = system("touch POSCAR");
+	Write_centres(data, Output, POSCAR, num_wann);
+	//Output every center in the desired format
+		//Finish writting centers
 	garbage = system("cp fplo_to_wann.up_centres.xyz fplo_to_wann.down_centres.xyz");
 	Output.close();
 	//Find block with Hamiltonian energies
+	string line;
 	while(getline(data, line)){
 		string first;
 		stringstream ss(line);
