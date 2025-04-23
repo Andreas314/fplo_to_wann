@@ -5,7 +5,7 @@ CXXFLAGS = -std=c++23 -O2 -Wall -Wextra
 # Files
 SRC = main.cpp fplo_to_wann.cpp
 OBJ = $(SRC:.cpp=.o)
-TARGET = main
+TARGET = fplo_to_wann
 
 # Default target
 all: $(TARGET)
