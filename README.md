@@ -20,7 +20,7 @@ Run in the same directory as +hamdata
 ./fplo\_to\_wann -H 1 2 3
 
 ## Installation
-git clone https://gitlab.com/yourusername/fplo\_to\_wann.git
+git clone 
 cd fplo\_to\_wann
 make
 
