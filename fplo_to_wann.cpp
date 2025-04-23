@@ -1,4 +1,13 @@
+#if __has_include(<Eigen/Dense>)
+    #include <Eigen/Dense>
+#elif __has_include(<eigen3/Eigen/Dense>)
+    #include <eigen3/Eigen/Dense>
+#else
+    #error "Could not find Eigen library. Please install Eigen or set the include path correctly."
+#endif
+
 #define BOHR_TO_ANG 0.529177249
+
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -9,7 +18,6 @@
 #include <iomanip>
 #include <cmath>
 #include <stdexcept>
-#include <eigen3/Eigen/Dense>
 #include "fplo_to_wann.h"
 
 using namespace std;

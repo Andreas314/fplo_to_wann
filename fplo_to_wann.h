@@ -1,7 +1,14 @@
+#if __has_include(<Eigen/Dense>)
+    #include <Eigen/Dense>
+#elif __has_include(<eigen3/Eigen/Dense>)
+    #include <eigen3/Eigen/Dense>
+#else
+    #error "Could not find Eigen library. Please install Eigen or set the include path correctly."
+#endif
+
 #include <map>
 #include <array>
 #include <fstream>
-#include<eigen3/Eigen/Dense>
 #include <string>
 #include <vector>
 bool Read_block(std::ifstream &file, std::map<std::array<int, 5>, std::array<double, 2>> &structure, std::array<double, 3> &max, std::array<double, 3> &min, Eigen::Matrix3d &A);
