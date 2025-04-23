@@ -18,6 +18,12 @@ using namespace Eigen;
 int main(int argc, char* argv[])
 {
 	cout << "fplo_to_wann: Translation of fplo +hamdata to Wannier90 _hr.dat file.\n";
+	//Open +hamdata and check if it exists
+	ifstream data("+hamdata");
+	if (!data.is_open()){
+		throw runtime_error("Error: No +hamdata in current directory!");
+	}
+
 	//A block processing input command
 	//So far, only accepts -H and three integers, which tells the programme number of cell, whose hamiltonian
 	//is to be printed to a file H_X_Y_Z.dat
@@ -53,15 +59,11 @@ int main(int argc, char* argv[])
 	int num_wann, num_spin; //number of wannier functions and spin
 	int garbage; //garbage value to store output of system command
 	
-	ifstream data("+hamdata");
 	garbage = system("test -d fplo_to_wann_results_files && rm -r fplo_to_wann_results_files");
 	garbage = system("mkdir fplo_to_wann_results_files");
 	garbage = chdir("fplo_to_wann_results_files");
 	garbage = system("touch POSCAR");
 	ofstream POSCAR("POSCAR");
-	if (!data.is_open()){
-		throw runtime_error("Error: No +hamdata in current directory!");
-	}
 	//Read beginning of hamdata -> number of spins and wannier functions, name of orbitals 
 	//and lattice vectors in real space which are also written to POSCAR and outputted
 	//Read until you get data to wanncentres
