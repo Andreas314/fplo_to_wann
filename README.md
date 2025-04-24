@@ -16,13 +16,13 @@
 
 ### Example
 
-Run in the same directory as +hamdata\
+Run in the same directory as +hamdata \
 ./fplo\_to\_wann -H 1 2 3
 
 ## Installation
-git clone https://github.com/Andreas314/fplo\_to\_wann.git\
-cd fplo\_to\_wann\
-make\
+git clone https://github.com/Andreas314/fplo\_to\_wann.git \
+cd fplo\_to\_wann \
+make \
 
 ## Requirements
 
