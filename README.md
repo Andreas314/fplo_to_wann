@@ -22,7 +22,7 @@ Run in the same directory as +hamdata \
 ## Installation
 git clone https://github.com/Andreas314/fplo\_to\_wann.git \
 cd fplo\_to\_wann \
-make \
+make
 
 ## Requirements
 
